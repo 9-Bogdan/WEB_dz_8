@@ -1,11 +1,10 @@
 from mongoengine import *
 from json import load
 import redis
-from redis_lru import RedisLRU
+
 
 connect(db='dz_8', host='mongodb+srv://Bogdan:gypsy_king21@bogdan.qbagtab.mongodb.net/?retryWrites=true&w=majority')
 client = redis.StrictRedis(host="localhost", port=6379, password=None)
-cache = RedisLRU(client)
 
 
 class Author(Document):
@@ -48,48 +47,65 @@ def load_quotes(filename):
 
 def command_name(name):
     if len(name) <= 2:
-        authors = Author.objects()
-        authors_name = []
-        for author in authors:
-            author_name = author.fullname
-            if author_name.lower().startswith(name):
-                authors_name.append(author_name)
-        author_name = Author.objects(fullname=authors_name[0]).first()
-        if author_name:
-            quotes = Quote.objects(author=author_name)
-            for quote in quotes:
-                print(f"{quote.quote}")
+        cached_result = client.get(f'command_name:{name}')
+        if cached_result:
+            print(cached_result.decode('utf-8'))
         else:
-            "Such an author does not exist"
+            authors = Author.objects()
+            authors_name = []
+            for author in authors:
+                author_name = author.fullname
+                if author_name.lower().startswith(name):
+                    authors_name.append(author_name)
+            author_name = Author.objects(fullname=authors_name[0]).first()
+            if author_name:
+                quotes = Quote.objects(author=author_name)
+                result = '\n'.join([quote.quote for quote in quotes])
+                client.set(f'command_name:{name}', result)
+                print(result)
+            else:
+                "Such an author does not exist"
     else:
-        author_name = Author.objects(fullname=name).first()
-        if author_name:
-            quotes = Quote.objects(author=author_name)
-            for quote in quotes:
-                print(f"{quote.quote}")
+        cached_result = client.get(f'command_name:{name}')
+        if cached_result:
+            print(cached_result.decode('utf-8'))
         else:
-            "Such an author does not exist"
+            author_name = Author.objects(fullname=name).first()
+            if author_name:
+                quotes = Quote.objects(author=author_name)
+                result = '\n'.join([quote.quote for quote in quotes])
+                client.set(f'command_name:{name}', result)
+                print(result)
+            else:
+                "Such an author does not exist"
 
 
 def command_tag(tag_name):
-    result = []
     if len(tag_name) <= 2:
-        quotes = Quote.objects()
-        quotes_tag = []
-        for quote in quotes:
-            quote_tag = quote.tags
-            for i in quote_tag:
-                if i.lower().startswith(tag_name):
-                    quotes_tag.append(i)
-        quotes = Quote.objects(tags=quotes_tag[0])
-        for quote in quotes:
-            result.append(f"{quote.quote}")
-            print(f"{quote.quote}")
+        cached_result = client.get(f'command_tag:{tag_name}')
+        if cached_result:
+            print(cached_result.decode('utf-8'))
+        else:
+            quotes = Quote.objects()
+            quotes_tag = []
+            for quote in quotes:
+                quote_tag = quote.tags
+                for i in quote_tag:
+                    if i.lower().startswith(tag_name):
+                        quotes_tag.append(i)
+            quotes = Quote.objects(tags=quotes_tag[0])
+            result = '\n'.join([quote.quote for quote in quotes])
+            client.set(f'command_tag:{tag_name}', result)
+            print(result)
     else:
-        quotes = Quote.objects(tags=tag_name)
-        for quote in quotes:
-            result.append(f"{quote.quote}")
-            print(f"{quote.quote}")
+        cached_result = client.get(f'command_tag:{tag_name}')
+        if cached_result:
+            print(cached_result.decode('utf-8'))
+        else:
+            quotes = Quote.objects(tags=tag_name)
+            result = '\n'.join([quote.quote for quote in quotes])
+            client.set(f'command_tag:{tag_name}', result)
+            print(result)
 
 
 def command_tags(tags):
@@ -121,5 +137,5 @@ def search():
 
 
 search()
-# load_authors("authors.json")
-# load_quotes('quotes.json')
+load_authors("authors.json")
+load_quotes('quotes.json')
